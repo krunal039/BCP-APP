@@ -54,6 +54,8 @@ model User {
   passwordHash       String
   displayName        String
   urgentBypass       Boolean  @default(false)
+  /// Bumped on logout / forced invalidation so outstanding JWTs fail auth.
+  tokenVersion       Int      @default(0)
   lockedUntil        DateTime?
   failedLoginCount   Int      @default(0)
   createdAt          DateTime @default(now())

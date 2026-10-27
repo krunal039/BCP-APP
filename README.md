@@ -79,11 +79,40 @@ cp apps/api/.env.example apps/api/.env
 # set DATABASE_URL to a local or West Europe Postgres instance
 pnpm --filter @bcp/api db:generate
 pnpm --filter @bcp/api db:migrate
+pnpm --filter @bcp/api db:seed   # requires SEED_ADMIN_PASSWORD in env / .env
 ```
 
 Schema includes users, roles, phones (`e164` + `countryCode`), groups, templates, alerts (`senderUserId` / `approverUserId`), approvals, delivery_events, audit_events, and device tokens.
 
 **Approver ≠ Sender:** `Alert.senderUserId` and `Alert.approverUserId` are separate columns so the API can reject self-approval (403) in E4. Documented here only for scaffold; enforcement lands with the approvals epic.
+
+## Auth & roles (E2)
+
+Username/password (argon2id) + JWT access tokens. Roles: `recipient` | `sender` | `approver` | `admin`. Optional `urgentBypass` capability (defaults off). No Entra in MVP.
+
+| Method | Path | Authz |
+|---|---|---|
+| `POST` | `/auth/login` | public |
+| `POST` | `/auth/logout` | authenticated (bumps `tokenVersion` → revokes JWT) |
+| `GET` | `/auth/me` | authenticated |
+| `POST` | `/users` | admin — create user + roles |
+| `PATCH` | `/users/:id/roles` | admin — replace roles / bypass flag (audited; revokes tokens) |
+| `GET` | `/rbac/sender` · `/rbac/approver` · `/rbac/admin` | role probe routes for smoke tests |
+
+Password policy: min 12 chars, at least one letter + one number. Lockout after 5 failed logins (15 minutes). Tokens and passwords are redacted from logs.
+
+```bash
+# unit tests (no DB)
+pnpm --filter @bcp/api test:unit
+
+# integration (needs DATABASE_URL + migrated DB)
+pnpm --filter @bcp/api test:integration
+
+# curl smoke against a running API
+SEED_ADMIN_PASSWORD='ChangeMeAdmin1!' pnpm --filter @bcp/api smoke:auth
+```
+
+**Refresh strategy:** access JWT only (default 8h via `JWT_EXPIRES_IN`). Logout and role changes invalidate immediately via `User.tokenVersion`. Refresh tokens can land later if mobile needs longer sessions without re-login.
 
 ## Docker (API)
 
@@ -100,4 +129,4 @@ GitHub Actions stub runs install + typecheck/build on PRs (`.github/workflows/ci
 
 ## What's next
 
-See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — continue E1 (West Europe Azure), E2 auth, then dual-control and ACS.
+See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — continue E1 (West Europe Azure), then members/groups (E3), dual-control alerts (E4), and ACS SMS (E5).

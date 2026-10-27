@@ -28,3 +28,8 @@ jobs:
         env:
           # Prisma generate needs a URL string; no live DB required for scaffold build.
           DATABASE_URL: postgresql://bcp:bcp@localhost:5432/bcp_dev?schema=public
+
+      - name: Unit tests (auth)
+        run: pnpm --filter @bcp/api test:unit
+        env:
+          DATABASE_URL: postgresql://bcp:bcp@localhost:5432/bcp_dev?schema=public

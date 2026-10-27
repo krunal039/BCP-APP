@@ -62,6 +62,47 @@ API health check:
 curl -s http://localhost:3001/health | jq
 ```
 
+## Web + mobile against local API (E7 / E8 MVP UI)
+
+The Next.js console and Expo app call the Fastify API directly (CORS enabled for local browsers). No Azure deploy required for this slice.
+
+1. **Start Postgres + migrate + seed** (see Database section below).
+2. **API** on `:3001`:
+
+```bash
+cp apps/api/.env.example apps/api/.env   # if needed
+pnpm --filter @bcp/api db:generate
+pnpm --filter @bcp/api db:migrate
+SEED_ADMIN_PASSWORD='ChangeMeAdmin1!' pnpm --filter @bcp/api db:seed
+pnpm --filter @bcp/api dev
+```
+
+3. **Web admin** (`apps/web`) on `:3000`:
+
+```bash
+cp apps/web/.env.example apps/web/.env.local   # optional; defaults to http://localhost:3001
+pnpm --filter @bcp/web dev
+```
+
+Open http://localhost:3000 → sign in with the seeded admin (or Sender/Approver users you create via `POST /users`). Nav is role-gated: Members/Groups (read for Sender/Approver; mutate Admin), Compose (Sender/Admin), Approvals (Approver/Admin), Delivery status.
+
+4. **Expo mobile** (`apps/mobile`):
+
+```bash
+cp apps/mobile/.env.example apps/mobile/.env   # set EXPO_PUBLIC_API_URL
+pnpm --filter @bcp/mobile dev
+```
+
+| Client | `EXPO_PUBLIC_API_URL` / notes |
+|---|---|
+| iOS simulator / Expo web | `http://localhost:3001` |
+| Android emulator | `http://10.0.2.2:3001` |
+| Physical device | `http://<your-lan-ip>:3001` (API must listen on `0.0.0.0`) |
+
+Mobile flows: login → compose/submit for approval → approval queue (approve/reject) → urgent bypass (capability + reason) → basic delivery status. Roles are enforced by the API; the UI only hides unavailable actions.
+
+**Dual-control reminder:** Approver ≠ Sender is rejected with 403 by the API even if the UI is wrong.
+
 ## Build
 
 ```bash
@@ -194,4 +235,4 @@ GitHub Actions stub runs install + typecheck/build on PRs (`.github/workflows/ci
 
 ## What's next
 
-See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — continue E1 (West Europe Azure), E6 (Expo push), then thin E8 / E7.
+See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — continue E1 (West Europe Azure), E6 (Expo push), templates UI polish, store prep, then E9 hardening.

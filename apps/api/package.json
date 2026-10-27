@@ -26,6 +26,7 @@
   "dependencies": {
     "@azure/communication-sms": "1.1.0",
     "@bcp/shared": "workspace:*",
+    "@fastify/cors": "^11.3.1",
     "@fastify/jwt": "^9.1.0",
     "@fastify/sensible": "^6.0.3",
     "@prisma/client": "^6.6.0",

@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import sensible from "@fastify/sensible";
 import {
   AlertStateSchema,
@@ -41,6 +42,11 @@ export async function buildApp(env: Env) {
     },
   );
 
+  // Browser (Next.js) + Expo web clients call the API directly in local MVP.
+  await app.register(cors, {
+    origin: true,
+    credentials: true,
+  });
   await app.register(sensible);
   await app.register(authPlugin, { env });
   await app.register(membersPlugin);

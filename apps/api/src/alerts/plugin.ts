@@ -1,6 +1,8 @@
 import fp from "fastify-plugin";
 import type { FastifyInstance } from "fastify";
+import type { Env } from "../env.js";
 import { getPrisma } from "../db.js";
+import { createDeliveryPort } from "../delivery/factory.js";
 import {
   StubDeliveryAdapter,
   type DeliveryPort,
@@ -15,10 +17,10 @@ declare module "fastify" {
   }
 }
 
-export const alertsPlugin = fp(async (app: FastifyInstance) => {
-  const stub = new StubDeliveryAdapter();
-  app.decorate("stubDelivery", stub);
-  app.decorate("deliveryPort", stub as DeliveryPort);
+export const alertsPlugin = fp(async (app: FastifyInstance, opts: { env: Env }) => {
+  const { deliveryPort, stubDelivery } = createDeliveryPort(opts.env);
+  app.decorate("stubDelivery", stubDelivery);
+  app.decorate("deliveryPort", deliveryPort);
 
   let cached: AlertService | undefined;
   const resolve = (): AlertService => {

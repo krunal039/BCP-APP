@@ -11,6 +11,7 @@ import { membersPlugin } from "./members/plugin.js";
 import { groupsPlugin } from "./groups/plugin.js";
 import { templatesPlugin } from "./templates/plugin.js";
 import { alertsPlugin } from "./alerts/plugin.js";
+import { acsWebhookPlugin } from "./webhooks/acs-plugin.js";
 
 export async function buildApp(env: Env) {
   const app = Fastify({
@@ -20,6 +21,7 @@ export async function buildApp(env: Env) {
       redact: {
         paths: [
           "req.headers.authorization",
+          "req.headers.x-acs-webhook-secret",
           "req.body.password",
           "req.body.accessToken",
           "body.password",
@@ -44,7 +46,8 @@ export async function buildApp(env: Env) {
   await app.register(membersPlugin);
   await app.register(groupsPlugin);
   await app.register(templatesPlugin);
-  await app.register(alertsPlugin);
+  await app.register(alertsPlugin, { env });
+  await app.register(acsWebhookPlugin, { env });
 
   app.get("/health", async () => {
     return {

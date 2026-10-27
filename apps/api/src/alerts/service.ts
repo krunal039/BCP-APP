@@ -15,6 +15,7 @@ import {
 } from "@bcp/shared";
 import { writeAudit } from "../audit/write.js";
 import type { DeliveryPort } from "../delivery/port.js";
+import { applyFanOutResults } from "../jobs/fan-out.js";
 import { resolveTargetSnapshot } from "./snapshot.js";
 
 type AlertRow = {
@@ -588,7 +589,8 @@ export class AlertService {
 
   /**
    * Shared approve/bypass send path:
-   * approved|bypassed → persist snapshot + delivery rows → stub enqueue → sending → completed.
+   * approved|bypassed → persist snapshot + delivery rows → fan-out (ACS|stub)
+   * → sending → completed|partial_failure (ACS may stay sending until webhooks).
    */
   private async persistSendPath(input: {
     alert: AlertRow;
@@ -674,47 +676,23 @@ export class AlertService {
       return next;
     });
 
-    // Stub adapter records intended SMS/push (no live ACS).
-    await this.delivery.enqueue({
+    // Fan-out: ACS when configured, otherwise in-memory stub (no Azure secrets needed).
+    const enqueueResult = await this.delivery.enqueue({
       alertId: alert.id,
       body: alert.body,
       targets: snapshot.targets as SnapshotTarget[],
     });
 
-    // Advance sending → completed for stub path (real ACS worker is E5).
-    const sent = await this.prisma.$transaction(async (tx) => {
-      await tx.alert.update({
-        where: { id: alert.id },
-        data: { state: "sending" },
-      });
-      await tx.deliveryEvent.updateMany({
-        where: { alertId: alert.id, status: "queued" },
-        data: {
-          status: "submitted",
-          providerMessageId: `stub-${alert.id}`,
-        },
-      });
-      const completed = await tx.alert.update({
-        where: { id: alert.id },
-        data: { state: "completed" },
-      });
-      await writeAudit(tx, {
-        actorUserId,
-        alertId: alert.id,
-        action: "alert.delivery_stub_enqueued",
-        payload: {
-          targetCount: snapshot.targets.length,
-          provider: "stub",
-        },
-      });
-      return completed;
+    const sent = await applyFanOutResults(this.prisma, {
+      alertId: alert.id,
+      actorUserId,
+      providerKind: this.delivery.kind,
+      results: enqueueResult.results,
     });
 
-    // Preserve approved/bypassed semantics in response via re-read fields;
-    // final state is completed after stub send.
+    // Preserve decision metadata from the pre-send update.
     return {
       ...sent,
-      // Keep decision metadata from the pre-send update.
       approverUserId: updated.approverUserId,
       bypassReason: updated.bypassReason,
       targetSnapshot: updated.targetSnapshot,

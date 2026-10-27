@@ -167,8 +167,12 @@ model Alert {
   approverUserId String?        @db.Uuid
   bypassReason   String?
   rejectNote     String?
-  /// Immutable target snapshot at approve/bypass time (JSON)
+  /// Group IDs selected at compose time (before recipient resolve).
+  targetGroupIds Json
+  /// Immutable recipient snapshot at approve/bypass time (JSON)
   targetSnapshot Json?
+  /// Client idempotency key scoped to sender (optional).
+  idempotencyKey String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   template       Template?      @relation(fields: [templateId], references: [id])
@@ -178,6 +182,7 @@ model Alert {
   deliveries     DeliveryEvent[]
   auditEvents    AuditEvent[]
 
+  @@unique([senderUserId, idempotencyKey])
   @@index([state])
   @@index([senderUserId])
   @@index([approverUserId])

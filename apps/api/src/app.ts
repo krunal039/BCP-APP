@@ -9,6 +9,8 @@ import type { Env } from "./env.js";
 import { authPlugin } from "./auth/plugin.js";
 import { membersPlugin } from "./members/plugin.js";
 import { groupsPlugin } from "./groups/plugin.js";
+import { templatesPlugin } from "./templates/plugin.js";
+import { alertsPlugin } from "./alerts/plugin.js";
 
 export async function buildApp(env: Env) {
   const app = Fastify({
@@ -41,6 +43,8 @@ export async function buildApp(env: Env) {
   await app.register(authPlugin, { env });
   await app.register(membersPlugin);
   await app.register(groupsPlugin);
+  await app.register(templatesPlugin);
+  await app.register(alertsPlugin);
 
   app.get("/health", async () => {
     return {

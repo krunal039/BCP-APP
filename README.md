@@ -132,10 +132,32 @@ DRC-first directory: E.164 phones with extensible `countryCode` (default `CD`). 
 | `POST` | `/groups` · `/groups/:id/members` | admin |
 | `PATCH` / `DELETE` | `/groups/:id` · `DELETE /groups/:id/members/:memberId` | admin |
 
-`GET /groups/:id/phones` resolves active member phones for send-time targeting; empty groups report `sendable: false` (E4 will block targeting). Contact basis (`employment` / `consent` / `other`) is stored on each member.
+`GET /groups/:id/phones` resolves active member phones for send-time targeting; empty groups report `sendable: false` (E4 blocks targeting). Contact basis (`employment` / `consent` / `other`) is stored on each member.
 
 ```bash
 pnpm --filter @bcp/api smoke:members
+```
+
+## Dual-control alerts (E4)
+
+Templates + compose + Approver ≠ Sender + urgent bypass. No live ACS — a **stub DeliveryPort** records intended SMS/push targets. Recipient ack is out of MVP.
+
+| Method | Path | Authz |
+|---|---|---|
+| `GET` / `POST` | `/templates` · `GET`/`PATCH /templates/:id` | read: sender/approver/admin · mutate: admin |
+| `GET` / `POST` | `/alerts` | read: sender/approver/admin · compose: sender/admin |
+| `POST` | `/alerts/bypass` | sender/admin + `urgentBypass` + mandatory `reason` |
+| `POST` | `/alerts/:id/submit` | sender/admin — draft → pending_approval |
+| `POST` | `/alerts/:id/approve` · `/reject` | approver/admin — **403 if actor = sender** |
+| `POST` | `/alerts/:id/bypass` | sender/admin + capability + reason |
+| `GET` | `/alerts/:id/deliveries` | sender/approver/admin |
+| `GET` | `/audit` | sender/approver/admin — filter by `alertId` / `action` |
+
+State machine: `draft → pending_approval → approved|rejected` (normal) or `draft → bypassed` (urgent); approve/bypass snapshots recipients then stub-sends → `sending → completed`.
+
+```bash
+pnpm --filter @bcp/api test:unit          # includes dual-control service tests (needs DB)
+pnpm --filter @bcp/api test:integration   # includes alerts HTTP tests
 ```
 
 ## Docker (API)
@@ -153,4 +175,4 @@ GitHub Actions stub runs install + typecheck/build on PRs (`.github/workflows/ci
 
 ## What's next
 
-See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — continue E1 (West Europe Azure), then members/groups (E3), dual-control alerts (E4), and ACS SMS (E5).
+See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — continue E1 (West Europe Azure) and E5 (ACS SMS fan-out replacing the stub DeliveryPort).

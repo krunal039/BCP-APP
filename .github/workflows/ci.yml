@@ -29,7 +29,9 @@ jobs:
           # Prisma generate needs a URL string; no live DB required for scaffold build.
           DATABASE_URL: postgresql://bcp:bcp@localhost:5432/bcp_dev?schema=public
 
-      - name: Unit tests (auth)
+      - name: Unit tests (auth + ACS mocked)
         run: pnpm --filter @bcp/api test:unit
         env:
+          # Placeholder URL for Prisma client generate/import only — no live DB or ACS secrets.
           DATABASE_URL: postgresql://bcp:bcp@localhost:5432/bcp_dev?schema=public
+          # ACS_* intentionally unset → stub DeliveryPort in CI.

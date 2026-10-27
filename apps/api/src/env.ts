@@ -41,11 +41,31 @@ const EnvSchema = z
     SEED_ADMIN_USERNAME: z.string().default("admin"),
     SEED_ADMIN_PASSWORD: z.string().optional(),
     SEED_ADMIN_DISPLAY_NAME: z.string().default("BCP Admin"),
+    /**
+     * Azure Communication Services SMS (optional).
+     * When both ACS_CONNECTION_STRING and ACS_PHONE_NUMBER (or SMS_FROM) are set,
+     * fan-out uses the real ACS adapter; otherwise the in-memory stub is used (CI/dev).
+     */
+    ACS_CONNECTION_STRING: z.string().min(1).optional(),
+    /** ACS-owned E.164 from-number (or registered sender ID). */
+    ACS_PHONE_NUMBER: z.string().min(1).optional(),
+    /** Alias for ACS_PHONE_NUMBER (SMS from). */
+    SMS_FROM: z.string().min(1).optional(),
+    /**
+     * Optional shared secret for POST /webhooks/acs/sms-delivery
+     * (header x-acs-webhook-secret or Authorization: Bearer …).
+     * Leave unset in CI; set in Azure via Key Vault for production.
+     */
+    ACS_WEBHOOK_SECRET: z.string().min(1).optional(),
   })
-  .transform((env) => ({
-    ...env,
-    JWT_EXPIRES_IN_SECONDS: parseDurationToSeconds(env.JWT_EXPIRES_IN),
-  }));
+  .transform((env) => {
+    const from = env.ACS_PHONE_NUMBER ?? env.SMS_FROM;
+    return {
+      ...env,
+      ACS_PHONE_NUMBER: from,
+      JWT_EXPIRES_IN_SECONDS: parseDurationToSeconds(env.JWT_EXPIRES_IN),
+    };
+  });
 
 export type Env = z.infer<typeof EnvSchema>;
 

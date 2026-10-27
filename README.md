@@ -9,7 +9,7 @@ Monorepo for the Glencore BCP Critical Notifications MVP: dual-control SMS + pus
 | Mobile | **Expo / React Native** |
 | API | **Node / TypeScript** |
 | Web admin | **Next.js** |
-| SMS | Azure Communication Services (**later** — adapter in E5) |
+| SMS | Azure Communication Services (ACS adapter + delivery webhooks) |
 | Azure region | **West Europe** (Postgres / PII + deploy); North Europe = HA later |
 | Auth (MVP) | Username / password + in-app roles (no Entra) |
 | Approval | **Approver ≠ Sender** — enforced server-side on every normal approve |
@@ -140,7 +140,7 @@ pnpm --filter @bcp/api smoke:members
 
 ## Dual-control alerts (E4)
 
-Templates + compose + Approver ≠ Sender + urgent bypass. No live ACS — a **stub DeliveryPort** records intended SMS/push targets. Recipient ack is out of MVP.
+Templates + compose + Approver ≠ Sender + urgent bypass. Recipient ack is out of MVP.
 
 | Method | Path | Authz |
 |---|---|---|
@@ -153,12 +153,31 @@ Templates + compose + Approver ≠ Sender + urgent bypass. No live ACS — a **s
 | `GET` | `/alerts/:id/deliveries` | sender/approver/admin |
 | `GET` | `/audit` | sender/approver/admin — filter by `alertId` / `action` |
 
-State machine: `draft → pending_approval → approved|rejected` (normal) or `draft → bypassed` (urgent); approve/bypass snapshots recipients then stub-sends → `sending → completed`.
+State machine: `draft → pending_approval → approved|rejected` (normal) or `draft → bypassed` (urgent); approve/bypass snapshots recipients then fans out → `sending → completed|partial_failure`.
+
+## ACS SMS delivery (E5)
+
+Fan-out uses **Azure Communication Services** when configured; otherwise the in-memory **stub** (safe for CI / local without Azure secrets). Push remains an Expo placeholder until E6.
+
+| Env | Required? | Purpose |
+|---|---|---|
+| `ACS_CONNECTION_STRING` | for live SMS | ACS resource connection string (Key Vault in Azure) |
+| `ACS_PHONE_NUMBER` | for live SMS | ACS-owned E.164 from-number (or registered sender) |
+| `SMS_FROM` | alias | Same as `ACS_PHONE_NUMBER` if the latter is unset |
+| `ACS_WEBHOOK_SECRET` | recommended in prod | Shared secret for delivery webhooks |
+
+| Method | Path | Authz |
+|---|---|---|
+| `POST` | `/webhooks/acs/sms-delivery` | Event Grid → ACS delivery reports (optional `x-acs-webhook-secret` / Bearer). Handles subscription validation. |
+
+Delivery lifecycle per recipient: `queued → submitted → delivered|failed`. Webhooks match on `providerMessageId` (ACS `messageId`). Unknown IDs are logged and ignored. Alert stays `sending` after ACS submit until DLRs arrive (stub path completes immediately).
 
 ```bash
-pnpm --filter @bcp/api test:unit          # includes dual-control service tests (needs DB)
-pnpm --filter @bcp/api test:integration   # includes alerts HTTP tests
+pnpm --filter @bcp/api test:unit          # ACS adapter (mocked SDK) + webhook auth/validation
+pnpm --filter @bcp/api test:integration   # dual-control + webhook persistence (needs DB)
 ```
+
+Do **not** put ACS secrets in git or CI. Omit ACS_* in GitHub Actions so tests always use the stub.
 
 ## Docker (API)
 
@@ -175,4 +194,4 @@ GitHub Actions stub runs install + typecheck/build on PRs (`.github/workflows/ci
 
 ## What's next
 
-See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — continue E1 (West Europe Azure) and E5 (ACS SMS fan-out replacing the stub DeliveryPort).
+See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — continue E1 (West Europe Azure), E6 (Expo push), then thin E8 / E7.

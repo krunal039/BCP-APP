@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import { AuthProvider } from "../lib/auth";
 
 export const metadata: Metadata = {
   title: "Glencore BCP Critical Notifications",
-  description: "Admin console for BCP critical alerts (MVP scaffold)",
+  description: "Admin console for BCP critical alerts (MVP)",
 };
 
 export default function RootLayout({
@@ -23,7 +24,7 @@ export default function RootLayout({
           minHeight: "100vh",
         }}
       >
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

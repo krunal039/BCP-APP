@@ -1,7 +1,9 @@
-// BCP Critical Notifications — schema v1 (E0.4)
+// BCP Critical Notifications — schema v1 (+ E3 members/groups)
 // Region target: Azure Postgres Flexible Server in West Europe.
 // Dual-control: alerts store senderUserId + approverUserId so Approver ≠ Sender
 // can be enforced in application logic (and checked in queries).
+// Directory: Member (+ Phone) is separate from auth User — ~10k SMS recipients
+// do not require login accounts. Groups reference Members.
 
 generator client {
   provider = "prisma-client-js"
@@ -48,6 +50,13 @@ enum DeliveryStatus {
   failed
 }
 
+/// Basis for contacting a member (compliance hygiene, E3.4).
+enum ContactBasis {
+  employment
+  consent
+  other
+}
+
 model User {
   id                 String   @id @default(uuid()) @db.Uuid
   username           String   @unique
@@ -61,12 +70,12 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   roles              UserRole[]
-  phones             Phone[]
-  groupMemberships   GroupMember[]
   sentAlerts         Alert[]  @relation("AlertSender")
   approvedAlerts     Alert[]  @relation("AlertApprover")
   auditEvents        AuditEvent[]
   deviceTokens       DeviceToken[]
+  /// Optional 1:1 link when a directory member also has an app login.
+  member             Member?
 }
 
 model UserRole {
@@ -77,20 +86,40 @@ model UserRole {
   @@id([userId, role])
 }
 
+/// SMS/push directory entry (not an auth account). DRC-first via countryCode on phones.
+model Member {
+  id              String        @id @default(uuid()) @db.Uuid
+  displayName     String
+  active          Boolean       @default(true)
+  contactBasis    ContactBasis  @default(employment)
+  contactBasisAt  DateTime      @default(now())
+  /// Optional link to auth User (recipient app login / push).
+  userId          String?       @unique @db.Uuid
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  phones          Phone[]
+  groupMemberships GroupMember[]
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([active])
+  @@index([displayName])
+}
+
 model Phone {
   id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @db.Uuid
+  memberId    String   @db.Uuid
   /// E.164, e.g. +243XXXXXXXXX
   e164        String
   /// ISO 3166-1 alpha-2; default CD (DRC), extensible
   countryCode String   @default("CD") @db.Char(2)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  member      Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, e164])
+  @@unique([memberId, e164])
   @@index([countryCode])
   @@index([e164])
+  @@index([active])
 }
 
 model Group {
@@ -100,15 +129,18 @@ model Group {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   members     GroupMember[]
+
+  @@index([name])
 }
 
 model GroupMember {
-  groupId String @db.Uuid
-  userId  String @db.Uuid
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId  String @db.Uuid
+  memberId String @db.Uuid
+  group    Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
-  @@id([groupId, userId])
+  @@id([groupId, memberId])
+  @@index([memberId])
 }
 
 model Template {

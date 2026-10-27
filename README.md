@@ -82,9 +82,11 @@ pnpm --filter @bcp/api db:migrate
 pnpm --filter @bcp/api db:seed   # requires SEED_ADMIN_PASSWORD in env / .env
 ```
 
-Schema includes users, roles, phones (`e164` + `countryCode`), groups, templates, alerts (`senderUserId` / `approverUserId`), approvals, delivery_events, audit_events, and device tokens.
+Schema includes auth users/roles, directory **members** + phones (`e164` + `countryCode`, default `CD`), groups / group_members, templates, alerts (`senderUserId` / `approverUserId`), approvals, delivery_events, audit_events, and device tokens.
 
 **Approver ≠ Sender:** `Alert.senderUserId` and `Alert.approverUserId` are separate columns so the API can reject self-approval (403) in E4. Documented here only for scaffold; enforcement lands with the approvals epic.
+
+**Directory vs auth:** `Member` is the SMS/push cohort entity (~10k). Auth `User` accounts are separate; an optional `Member.userId` can link a recipient login later.
 
 ## Auth & roles (E2)
 
@@ -113,6 +115,28 @@ SEED_ADMIN_PASSWORD='ChangeMeAdmin1!' pnpm --filter @bcp/api smoke:auth
 ```
 
 **Refresh strategy:** access JWT only (default 8h via `JWT_EXPIRES_IN`). Logout and role changes invalidate immediately via `User.tokenVersion`. Refresh tokens can land later if mobile needs longer sessions without re-login.
+
+## Members & groups (E3)
+
+DRC-first directory: E.164 phones with extensible `countryCode` (default `CD`). Paginated list endpoints sized for ~10k. Mutations are **Admin-only**; Sender/Approver may read (for compose later).
+
+| Method | Path | Authz |
+|---|---|---|
+| `GET` | `/members` · `/members/:id` | sender / approver / admin |
+| `POST` | `/members` | admin |
+| `PATCH` | `/members/:id` | admin |
+| `POST` | `/members/:id/deactivate` | admin (soft-delete) |
+| `POST` | `/members/:id/phones` · `PATCH` …`/phones/:phoneId` | admin |
+| `POST` | `/members/import` | admin — CSV (`text/csv` or `{ csv }`); row-level errors; audited |
+| `GET` | `/groups` · `/groups/:id` · `/groups/:id/members` · `/groups/:id/phones` | sender / approver / admin |
+| `POST` | `/groups` · `/groups/:id/members` | admin |
+| `PATCH` / `DELETE` | `/groups/:id` · `DELETE /groups/:id/members/:memberId` | admin |
+
+`GET /groups/:id/phones` resolves active member phones for send-time targeting; empty groups report `sendable: false` (E4 will block targeting). Contact basis (`employment` / `consent` / `other`) is stored on each member.
+
+```bash
+pnpm --filter @bcp/api smoke:members
+```
 
 ## Docker (API)
 

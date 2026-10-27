@@ -10,14 +10,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/**/*.test.ts",
-    "test:unit": "tsx --test src/auth/password.test.ts src/auth/lockout.test.ts src/auth/rbac.test.ts",
-    "test:integration": "tsx --test src/auth/auth.integration.test.ts",
+    "test:unit": "tsx --test src/auth/password.test.ts src/auth/lockout.test.ts src/auth/rbac.test.ts src/members/csv.test.ts",
+    "test:integration": "tsx --test src/auth/auth.integration.test.ts src/members/members.integration.test.ts",
     "clean": "rm -rf dist",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "smoke:auth": "bash scripts/smoke-auth.sh"
+    "smoke:auth": "bash scripts/smoke-auth.sh",
+    "smoke:members": "bash scripts/smoke-members.sh"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -4,3 +4,4 @@ export * from "./alerts.js";
 export * from "./members.js";
 export * from "./groups.js";
 export * from "./delivery.js";
+export * from "./devices.js";

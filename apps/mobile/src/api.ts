@@ -169,4 +169,18 @@ export const api = {
       `/alerts/${id}/deliveries`,
       { token },
     ),
+  registerDeviceToken: (token: string, expoToken: string) =>
+    apiRequest<{
+      token: { id: string; expoToken: string; active: boolean; updatedAt: string };
+    }>("/me/device-tokens", {
+      method: "POST",
+      token,
+      body: { expoToken },
+    }),
+  deactivateDeviceToken: (token: string, expoToken: string) =>
+    apiRequest<{ ok: boolean; deactivated: boolean }>("/me/device-tokens", {
+      method: "DELETE",
+      token,
+      body: { expoToken },
+    }),
 };

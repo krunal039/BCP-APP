@@ -4,6 +4,8 @@ import type {
   DeliveryPort,
   DeliverySendResult,
 } from "./port.js";
+import type { PushSender } from "./push-sender.js";
+import { StubPushSender } from "./push-sender.js";
 
 /** Narrow surface so unit tests can mock ACS without the real SDK. */
 export type SmsClientLike = {
@@ -29,17 +31,20 @@ export type AcsSmsDeliveryOptions = {
   smsClient?: SmsClientLike;
   /** Max recipients per ACS send() call (SDK accepts a batch). */
   batchSize?: number;
+  /** Expo push (live or stub). Defaults to stub. */
+  pushSender?: PushSender;
 };
 
 /**
- * DeliveryPort that sends SMS via Azure Communication Services.
- * Push targets are recorded as Expo placeholders (E6 lands real push).
+ * DeliveryPort that sends SMS via Azure Communication Services
+ * and push via the configured PushSender (Expo or stub).
  */
 export class AcsSmsDeliveryAdapter implements DeliveryPort {
   readonly kind = "acs" as const;
   private readonly from: string;
   private readonly client: SmsClientLike;
   private readonly batchSize: number;
+  private readonly pushSender: PushSender;
 
   constructor(options: AcsSmsDeliveryOptions) {
     this.from = options.fromPhoneNumber;
@@ -47,6 +52,7 @@ export class AcsSmsDeliveryAdapter implements DeliveryPort {
     this.client =
       options.smsClient ??
       (new SmsClient(options.connectionString) as unknown as SmsClientLike);
+    this.pushSender = options.pushSender ?? new StubPushSender();
   }
 
   async enqueue(input: {
@@ -68,17 +74,13 @@ export class AcsSmsDeliveryAdapter implements DeliveryPort {
       results.push(...batchResults);
     }
 
-    for (const t of pushTargets) {
-      // Expo push remains a placeholder until E6.
-      results.push({
-        channel: "push",
-        address: t.address,
-        memberId: t.memberId,
-        status: "submitted",
-        providerMessageId: `expo-stub-${input.alertId}`,
-        errorCode: null,
-        provider: "expo-stub",
+    if (pushTargets.length > 0) {
+      const pushResults = await this.pushSender.send({
+        alertId: input.alertId,
+        body: input.body,
+        targets: pushTargets,
       });
+      results.push(...pushResults);
     }
 
     return { recorded: results.length, results };

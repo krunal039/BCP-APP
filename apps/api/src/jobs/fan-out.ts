@@ -63,6 +63,18 @@ export async function applyFanOutResults(
           errorCode: r.errorCode,
         },
       });
+
+      // Best-effort: deactivate stale Expo tokens (uninstall / revoke).
+      if (
+        r.channel === "push" &&
+        r.status === "failed" &&
+        r.errorCode === "DeviceNotRegistered"
+      ) {
+        await tx.deviceToken.updateMany({
+          where: { expoToken: r.address, active: true },
+          data: { active: false },
+        });
+      }
     }
 
     const completed = await tx.alert.update({

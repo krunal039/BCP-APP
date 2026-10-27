@@ -9,15 +9,28 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.glencore.bcp.criticalnotifications"
+      "bundleIdentifier": "com.glencore.bcp.criticalnotifications",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
     },
     "android": {
       "package": "com.glencore.bcp.criticalnotifications",
       "adaptiveIcon": {
         "backgroundColor": "#0f1c14"
-      }
+      },
+      "permissions": ["RECEIVE_BOOT_COMPLETED", "VIBRATE"]
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "sounds": [],
+          "mode": "production"
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

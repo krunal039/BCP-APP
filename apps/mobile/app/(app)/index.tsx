@@ -5,7 +5,16 @@ import { getApiBaseUrl } from "../../src/config";
 import { colors } from "../../src/theme";
 
 export default function HomeScreen() {
-  const { user, canCompose, canApprove, canBypass, logout } = useAuth();
+  const {
+    user,
+    canCompose,
+    canApprove,
+    canBypass,
+    logout,
+    pushStatus,
+    pushMessage,
+    retryPushRegistration,
+  } = useAuth();
   const router = useRouter();
 
   return (
@@ -17,6 +26,20 @@ export default function HomeScreen() {
         {canBypass ? " · urgent bypass enabled" : ""}
       </Text>
       <Text style={styles.meta}>API {getApiBaseUrl()}</Text>
+
+      {pushStatus === "granted" && !pushMessage ? (
+        <Text style={styles.pushOk}>Push notifications enabled</Text>
+      ) : null}
+      {pushMessage ? (
+        <View style={styles.pushBanner}>
+          <Text style={styles.pushBannerText}>{pushMessage}</Text>
+          {pushStatus === "denied" || pushStatus === "undetermined" ? (
+            <Pressable onPress={() => void retryPushRegistration()}>
+              <Text style={styles.pushRetry}>Try again</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.actions}>
         {canCompose ? (
@@ -51,7 +74,19 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.text, fontSize: 26, fontWeight: "700", marginBottom: 10 },
   body: { color: colors.muted, fontSize: 15, lineHeight: 22, marginBottom: 8 },
-  meta: { color: colors.muted, fontSize: 12, marginBottom: 24 },
+  meta: { color: colors.muted, fontSize: 12, marginBottom: 12 },
+  pushOk: { color: colors.accent, fontSize: 13, marginBottom: 16 },
+  pushBanner: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    gap: 8,
+  },
+  pushBannerText: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  pushRetry: { color: colors.accent, fontWeight: "700", fontSize: 13 },
   actions: { gap: 10 },
   button: {
     backgroundColor: colors.button,

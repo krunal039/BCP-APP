@@ -76,21 +76,47 @@ describe("members/groups integration", { skip: !hasDb }, () => {
       update: {},
     });
 
-    // Clean directory leftovers from prior runs.
-    await prisma.groupMember.deleteMany({});
-    await prisma.phone.deleteMany({});
-    await prisma.member.deleteMany({});
+    // Clean only this suite's fixtures (do not wipe other parallel suites).
+    const fixtureGroups = ["Mine Site A", "Empty Group", "Import Group"];
+    await prisma.groupMember.deleteMany({
+      where: { group: { name: { in: fixtureGroups } } },
+    });
+    const fixtureMembers = [
+      "Jean Mbala",
+      "Bad Phone",
+      "Amina Kabila",
+      "Paul Okito",
+    ];
+    await prisma.phone.deleteMany({
+      where: { member: { displayName: { in: fixtureMembers } } },
+    });
+    await prisma.member.deleteMany({
+      where: { displayName: { in: fixtureMembers } },
+    });
     await prisma.group.deleteMany({
-      where: { name: { in: ["Mine Site A", "Empty Group", "Import Group"] } },
+      where: { name: { in: fixtureGroups } },
     });
   });
 
   after(async () => {
-    await prisma.groupMember.deleteMany({});
-    await prisma.phone.deleteMany({});
-    await prisma.member.deleteMany({});
+    const fixtureGroups = ["Mine Site A", "Empty Group", "Import Group"];
+    const fixtureMembers = [
+      "Jean Mbala",
+      "Bad Phone",
+      "Amina Kabila",
+      "Paul Okito",
+    ];
+    await prisma.groupMember.deleteMany({
+      where: { group: { name: { in: fixtureGroups } } },
+    });
+    await prisma.phone.deleteMany({
+      where: { member: { displayName: { in: fixtureMembers } } },
+    });
+    await prisma.member.deleteMany({
+      where: { displayName: { in: fixtureMembers } },
+    });
     await prisma.group.deleteMany({
-      where: { name: { in: ["Mine Site A", "Empty Group", "Import Group"] } },
+      where: { name: { in: fixtureGroups } },
     });
     await prisma.user.deleteMany({
       where: { username: { in: ["mg_admin", "mg_sender"] } },

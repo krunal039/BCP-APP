@@ -35,3 +35,19 @@ jobs:
           # Placeholder URL for Prisma client generate/import only — no live DB or ACS secrets.
           DATABASE_URL: postgresql://bcp:bcp@localhost:5432/bcp_dev?schema=public
           # ACS_* intentionally unset → stub DeliveryPort in CI.
+
+  # Compile Bicep without Azure credentials / login (E1).
+  bicep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: |
+          curl -fsSL -o bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x ./bicep
+          sudo mv ./bicep /usr/local/bin/bicep
+          bicep --version
+
+      - name: Build infra/main.bicep
+        run: bicep build infra/main.bicep --outfile /tmp/main.json

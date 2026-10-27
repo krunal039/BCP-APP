@@ -1,17 +1,52 @@
-# Infra (E1)
+# Infra — Azure West Europe (E1)
 
-Azure resources for BCP Critical Notifications will live here (Bicep preferred).
+Lean Bicep stack for the BCP Critical Notifications **MVP pilot**.
 
-**Region:** West Europe for Postgres / PII and primary deploy. North Europe is reserved for HA / failover later — not provisioned in MVP unless required.
+| Item | Value |
+|---|---|
+| Region | **West Europe** (`westeurope`) — locked for Postgres / PII |
+| Compute | Azure Container Apps (API) |
+| Data | Postgres Flexible Server (Burstable `Standard_B1ms`) |
+| Secrets | Key Vault (RBAC) + Container Apps secret refs |
+| Telemetry | Log Analytics + Application Insights |
+| Cache | Redis Basic C0 **optional** (`enableRedis=false` by default) |
+| SMS | **ACS is external** — not created here; link into Key Vault (see [docs/deploy-azure.md](../docs/deploy-azure.md)) |
 
-Planned resources (see Project build plan §4):
+## Layout
 
-- Resource group + managed identity
-- Postgres Flexible Server
-- Key Vault
-- Application Insights
-- Container Apps environment
-- Azure Communication Services (SMS)
-- Redis (or Postgres SKIP LOCKED interim)
+```
+infra/
+  main.bicep                 # orchestration (resource-group scope)
+  modules/
+    monitoring.bicep         # Log Analytics + App Insights
+    postgres.bicep           # Flexible Server + DB + Azure-services firewall
+    keyvault.bicep           # secrets + RBAC
+    redis.bicep              # optional Basic C0
+    container-apps.bicep     # CAE + API container
+  environments/
+    pilot.bicepparam         # non-secret pilot defaults
+```
 
-Scaffold only in E0 — no cloud resources are created by this PR.
+## Validate locally (no Azure login)
+
+```bash
+# Install Bicep CLI once: https://aka.ms/bicep-install
+az bicep build --file infra/main.bicep
+# or
+bicep build infra/main.bicep
+```
+
+CI also compiles Bicep on PRs (see `.github/workflows/ci.yml`) without Azure credentials.
+
+## Deploy
+
+Full prerequisites, ACS linking, env vars, and first-deploy steps: **[docs/deploy-azure.md](../docs/deploy-azure.md)**.
+
+Manual GitHub Actions deploy: **Actions → Deploy Azure (West Europe) → Run workflow** (`.github/workflows/deploy-azure.yml`).
+
+## Out of scope (this slice)
+
+- Live Azure subscription / credentials in CI
+- Private VNet / Private Link (public + Azure-services firewall for pilot)
+- Provisioning ACS (ops track — existing resource)
+- North Europe HA / geo-redundant Postgres

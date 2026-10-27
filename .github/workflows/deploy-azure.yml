@@ -1,0 +1,174 @@
+# Manual Azure deploy (West Europe). Does not run on pull_request —
+# PRs must stay green without Azure credentials.
+name: Deploy Azure (West Europe)
+
+on:
+  workflow_dispatch:
+    inputs:
+      name_prefix:
+        description: Resource name prefix (lowercase)
+        required: true
+        default: bcp-pilot
+        type: string
+      enable_redis:
+        description: Provision Redis Basic C0
+        required: true
+        default: false
+        type: boolean
+      wire_acs_secrets:
+        description: Mount ACS Key Vault secret refs (only after ACS secrets are real)
+        required: true
+        default: false
+        type: boolean
+      image_tag:
+        description: Container image tag (empty = github.sha)
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  id-token: write # OIDC → azure/login
+
+env:
+  LOCATION: westeurope
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    # Optional: add `environment: azure-pilot` for GitHub Environment approval gates.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require Azure secrets
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          BCP_POSTGRES_ADMIN_PASSWORD: ${{ secrets.BCP_POSTGRES_ADMIN_PASSWORD }}
+          BCP_JWT_SECRET: ${{ secrets.BCP_JWT_SECRET }}
+        run: |
+          missing=0
+          for v in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP BCP_POSTGRES_ADMIN_PASSWORD BCP_JWT_SECRET; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Missing repository secret: $v (see docs/deploy-azure.md)"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure resource group (West Europe)
+        run: |
+          az group create \
+            --name "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --location "${{ env.LOCATION }}" \
+            --output none
+
+      - name: Deploy infra (bootstrap / update)
+        id: infra
+        env:
+          # Optional ACS secrets — empty is fine until linked
+          ACS_CS: ${{ secrets.BCP_ACS_CONNECTION_STRING }}
+          ACS_PHONE: ${{ secrets.BCP_ACS_PHONE_NUMBER }}
+          ACS_WH: ${{ secrets.BCP_ACS_WEBHOOK_SECRET }}
+          DEPLOYER_OID: ${{ secrets.BCP_DEPLOYER_OBJECT_ID }}
+        run: |
+          set -euo pipefail
+          EXTRA=()
+          if [ -n "${ACS_CS:-}" ]; then EXTRA+=(--parameters acsConnectionString="$ACS_CS"); fi
+          if [ -n "${ACS_PHONE:-}" ]; then EXTRA+=(--parameters acsPhoneNumber="$ACS_PHONE"); fi
+          if [ -n "${ACS_WH:-}" ]; then EXTRA+=(--parameters acsWebhookSecret="$ACS_WH"); fi
+          if [ -n "${DEPLOYER_OID:-}" ]; then EXTRA+=(--parameters deployerObjectId="$DEPLOYER_OID"); fi
+
+          az deployment group create \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --template-file infra/main.bicep \
+            --parameters infra/environments/pilot.bicepparam \
+            --parameters namePrefix="${{ inputs.name_prefix }}" \
+            --parameters location="${{ env.LOCATION }}" \
+            --parameters postgresAdminPassword="${{ secrets.BCP_POSTGRES_ADMIN_PASSWORD }}" \
+            --parameters jwtSecret="${{ secrets.BCP_JWT_SECRET }}" \
+            --parameters enableRedis=${{ inputs.enable_redis }} \
+            --parameters wireAcsSecrets=${{ inputs.wire_acs_secrets }} \
+            --parameters createAcr=true \
+            "${EXTRA[@]}" \
+            --name "bcp-${{ github.run_id }}"
+
+          ACR=$(az deployment group show \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --name "bcp-${{ github.run_id }}" \
+            --query properties.outputs.acrLoginServer.value -o tsv)
+          echo "acr_login_server=$ACR" >> "$GITHUB_OUTPUT"
+
+          API_URL=$(az deployment group show \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --name "bcp-${{ github.run_id }}" \
+            --query properties.outputs.apiUrl.value -o tsv)
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push API image
+        env:
+          ACR: ${{ steps.infra.outputs.acr_login_server }}
+          TAG: ${{ inputs.image_tag != '' && inputs.image_tag || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ACR}" ]; then
+            echo "::error::acrLoginServer output empty — check createAcr / existing ACR params"
+            exit 1
+          fi
+          az acr login --name "${ACR%%.*}"
+          IMAGE="${ACR}/bcp-api:${TAG}"
+          docker build -f apps/api/Dockerfile -t "$IMAGE" -t "${ACR}/bcp-api:latest" .
+          docker push "$IMAGE"
+          docker push "${ACR}/bcp-api:latest"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Redeploy Container App with image
+        env:
+          ACS_CS: ${{ secrets.BCP_ACS_CONNECTION_STRING }}
+          ACS_PHONE: ${{ secrets.BCP_ACS_PHONE_NUMBER }}
+          ACS_WH: ${{ secrets.BCP_ACS_WEBHOOK_SECRET }}
+          DEPLOYER_OID: ${{ secrets.BCP_DEPLOYER_OBJECT_ID }}
+        run: |
+          set -euo pipefail
+          EXTRA=()
+          if [ -n "${ACS_CS:-}" ]; then EXTRA+=(--parameters acsConnectionString="$ACS_CS"); fi
+          if [ -n "${ACS_PHONE:-}" ]; then EXTRA+=(--parameters acsPhoneNumber="$ACS_PHONE"); fi
+          if [ -n "${ACS_WH:-}" ]; then EXTRA+=(--parameters acsWebhookSecret="$ACS_WH"); fi
+          if [ -n "${DEPLOYER_OID:-}" ]; then EXTRA+=(--parameters deployerObjectId="$DEPLOYER_OID"); fi
+
+          az deployment group create \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --template-file infra/main.bicep \
+            --parameters infra/environments/pilot.bicepparam \
+            --parameters namePrefix="${{ inputs.name_prefix }}" \
+            --parameters location="${{ env.LOCATION }}" \
+            --parameters postgresAdminPassword="${{ secrets.BCP_POSTGRES_ADMIN_PASSWORD }}" \
+            --parameters jwtSecret="${{ secrets.BCP_JWT_SECRET }}" \
+            --parameters enableRedis=${{ inputs.enable_redis }} \
+            --parameters wireAcsSecrets=${{ inputs.wire_acs_secrets }} \
+            --parameters createAcr=true \
+            --parameters containerImage="${IMAGE}" \
+            "${EXTRA[@]}" \
+            --name "bcp-${{ github.run_id }}-image"
+
+      - name: Summary
+        run: |
+          {
+            echo "## Azure deploy (West Europe)"
+            echo ""
+            echo "- API URL: \`${{ steps.infra.outputs.api_url }}\`"
+            echo "- Image: \`${IMAGE}\`"
+            echo "- ACS wired: \`${{ inputs.wire_acs_secrets }}\`"
+            echo ""
+            echo "Link ACS secrets in Key Vault before enabling \`wire_acs_secrets\` — see docs/deploy-azure.md."
+          } >> "$GITHUB_STEP_SUMMARY"

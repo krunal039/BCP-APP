@@ -1,0 +1,37 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# builds
+dist
+.next
+.expo
+out
+build
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# logs / os
+*.log
+.DS_Store
+.turbo
+
+# IDE
+.idea
+.vscode
+
+# Prisma
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# Expo
+apps/mobile/.expo
+apps/mobile/dist
+*.jks
+*.p8
+*.p12
+*.mobileprovision

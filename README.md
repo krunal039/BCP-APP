@@ -26,7 +26,8 @@ apps/
   mobile/    Expo (RN + TS) app shell
 packages/
   shared/    Zod schemas + domain types (roles, alerts, members, delivery)
-infra/       Bicep/Terraform placeholders (West Europe) — E1
+infra/       Bicep (West Europe) — Container Apps, Postgres, Key Vault, App Insights
+docs/        Deploy guide (Azure West Europe pilot)
 ```
 
 Package manager: **pnpm** · Task runner: **Turborepo**.
@@ -229,10 +230,27 @@ docker run --rm -p 3001:3001 bcp-api
 
 Do not put ACS / JWT / DB secrets in the image or in git. Use env / Key Vault at runtime (E1).
 
+## Azure deploy (West Europe) — E1
+
+Lean pilot stack: **Container Apps** (API) + **Postgres Flexible Server** + **Key Vault** + **App Insights** (+ optional Redis). **ACS is an existing external resource** — store connection string / phone in Key Vault, then set `wireAcsSecrets=true`.
+
+| Doc | Contents |
+|---|---|
+| [docs/deploy-azure.md](./docs/deploy-azure.md) | Prerequisites, region lock, env vars, ACS linking, first deploy, Actions secrets |
+| [infra/README.md](./infra/README.md) | Bicep layout + local `bicep build` |
+
+```bash
+# Validate IaC (no Azure login)
+az bicep build --file infra/main.bicep
+# or: bicep build infra/main.bicep
+```
+
+Manual deploy: **Actions → Deploy Azure (West Europe) → Run workflow** (`.github/workflows/deploy-azure.yml`). Requires repository secrets documented in the deploy guide — not needed for PR CI.
+
 ## CI
 
-GitHub Actions stub runs install + typecheck/build on PRs (`.github/workflows/ci.yml`).
+GitHub Actions on PRs: install + build + API unit tests + **Bicep compile** (`.github/workflows/ci.yml`). No Azure credentials required.
 
 ## What's next
 
-See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — continue E1 (West Europe Azure), E6 (Expo push), templates UI polish, store prep, then E9 hardening.
+See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — E6 (Expo push), templates UI polish, store prep, then E9 hardening / pilot checklist.

@@ -1,8 +1,14 @@
 import Fastify from "fastify";
 import sensible from "@fastify/sensible";
-import { AlertStateSchema, RoleSchema } from "@bcp/shared";
+import {
+  AlertStateSchema,
+  DEFAULT_COUNTRY_CODE,
+  RoleSchema,
+} from "@bcp/shared";
 import type { Env } from "./env.js";
 import { authPlugin } from "./auth/plugin.js";
+import { membersPlugin } from "./members/plugin.js";
+import { groupsPlugin } from "./groups/plugin.js";
 
 export async function buildApp(env: Env) {
   const app = Fastify({
@@ -22,8 +28,19 @@ export async function buildApp(env: Env) {
     },
   });
 
+  // Allow text/csv bodies for /members/import (JSON still default for other routes).
+  app.addContentTypeParser(
+    ["text/csv", "text/plain"],
+    { parseAs: "string" },
+    (_req, body, done) => {
+      done(null, body);
+    },
+  );
+
   await app.register(sensible);
   await app.register(authPlugin, { env });
+  await app.register(membersPlugin);
+  await app.register(groupsPlugin);
 
   app.get("/health", async () => {
     return {
@@ -34,6 +51,7 @@ export async function buildApp(env: Env) {
       domain: {
         roles: RoleSchema.options,
         alertStates: AlertStateSchema.options,
+        defaultCountryCode: DEFAULT_COUNTRY_CODE,
       },
     };
   });

@@ -1,0 +1,208 @@
+// BCP Critical Notifications — schema v1 (E0.4)
+// Region target: Azure Postgres Flexible Server in West Europe.
+// Dual-control: alerts store senderUserId + approverUserId so Approver ≠ Sender
+// can be enforced in application logic (and checked in queries).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  recipient
+  sender
+  approver
+  admin
+}
+
+enum AlertState {
+  draft
+  pending_approval
+  approved
+  rejected
+  bypassed
+  sending
+  completed
+  partial_failure
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+enum DeliveryChannel {
+  sms
+  push
+}
+
+enum DeliveryStatus {
+  queued
+  submitted
+  delivered
+  failed
+}
+
+model User {
+  id                 String   @id @default(uuid()) @db.Uuid
+  username           String   @unique
+  passwordHash       String
+  displayName        String
+  urgentBypass       Boolean  @default(false)
+  lockedUntil        DateTime?
+  failedLoginCount   Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  roles              UserRole[]
+  phones             Phone[]
+  groupMemberships   GroupMember[]
+  sentAlerts         Alert[]  @relation("AlertSender")
+  approvedAlerts     Alert[]  @relation("AlertApprover")
+  auditEvents        AuditEvent[]
+  deviceTokens       DeviceToken[]
+}
+
+model UserRole {
+  userId String @db.Uuid
+  role   Role
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+}
+
+model Phone {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  /// E.164, e.g. +243XXXXXXXXX
+  e164        String
+  /// ISO 3166-1 alpha-2; default CD (DRC), extensible
+  countryCode String   @default("CD") @db.Char(2)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, e164])
+  @@index([countryCode])
+  @@index([e164])
+}
+
+model Group {
+  id          String        @id @default(uuid()) @db.Uuid
+  name        String        @unique
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  members     GroupMember[]
+}
+
+model GroupMember {
+  groupId String @db.Uuid
+  userId  String @db.Uuid
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+}
+
+model Template {
+  id        String        @id @default(uuid()) @db.Uuid
+  name      String        @unique
+  body      String
+  locale    String        @default("fr")
+  severity  AlertSeverity @default(info)
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  alerts    Alert[]
+}
+
+model Alert {
+  id             String         @id @default(uuid()) @db.Uuid
+  state          AlertState     @default(draft)
+  severity       AlertSeverity
+  body           String
+  templateId     String?        @db.Uuid
+  /// Composer — must differ from approverUserId on normal approve
+  senderUserId   String         @db.Uuid
+  /// Set on approve; null until then / on bypass path
+  approverUserId String?        @db.Uuid
+  bypassReason   String?
+  rejectNote     String?
+  /// Immutable target snapshot at approve/bypass time (JSON)
+  targetSnapshot Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  template       Template?      @relation(fields: [templateId], references: [id])
+  sender         User           @relation("AlertSender", fields: [senderUserId], references: [id])
+  approver       User?          @relation("AlertApprover", fields: [approverUserId], references: [id])
+  approvals      Approval[]
+  deliveries     DeliveryEvent[]
+  auditEvents    AuditEvent[]
+
+  @@index([state])
+  @@index([senderUserId])
+  @@index([approverUserId])
+}
+
+model Approval {
+  id         String   @id @default(uuid()) @db.Uuid
+  alertId    String   @db.Uuid
+  actorUserId String  @db.Uuid
+  decision   String
+  note       String?
+  createdAt  DateTime @default(now())
+  alert      Alert    @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId])
+}
+
+model DeliveryEvent {
+  id                String          @id @default(uuid()) @db.Uuid
+  alertId           String          @db.Uuid
+  recipientUserId   String?         @db.Uuid
+  channel           DeliveryChannel
+  status            DeliveryStatus  @default(queued)
+  /// E.164 or Expo push token target
+  targetAddress     String
+  providerMessageId String?
+  errorCode         String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  alert             Alert           @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@unique([alertId, channel, targetAddress])
+  @@index([alertId, status])
+  @@index([providerMessageId])
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  alertId    String?  @db.Uuid
+  actorUserId String? @db.Uuid
+  action     String
+  payload    Json?
+  createdAt  DateTime @default(now())
+  alert      Alert?   @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  actor      User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([alertId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  expoToken String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

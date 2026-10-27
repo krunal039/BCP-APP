@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "BCP Critical Notifications",
+    "slug": "bcp-critical-notifications",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "bcp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.glencore.bcp.criticalnotifications"
+    },
+    "android": {
+      "package": "com.glencore.bcp.criticalnotifications",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f1c14"
+      }
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

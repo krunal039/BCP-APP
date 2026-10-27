@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/**/*.test.ts",
-    "test:unit": "tsx --test src/auth/password.test.ts src/auth/lockout.test.ts src/auth/rbac.test.ts src/members/csv.test.ts src/delivery/acs-sms.test.ts src/webhooks/acs-webhook.test.ts",
+    "test:unit": "tsx --test src/auth/password.test.ts src/auth/lockout.test.ts src/auth/rbac.test.ts src/members/csv.test.ts src/delivery/acs-sms.test.ts src/delivery/expo-push.test.ts src/webhooks/acs-webhook.test.ts",
     "test:integration": "tsx --test --test-concurrency=1 src/auth/auth.integration.test.ts src/members/members.integration.test.ts src/alerts/dual-control.test.ts src/alerts/alerts.integration.test.ts src/webhooks/acs-webhook.integration.test.ts",
     "clean": "rm -rf dist",
     "db:generate": "prisma generate",

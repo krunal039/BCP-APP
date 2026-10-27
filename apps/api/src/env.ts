@@ -57,6 +57,20 @@ const EnvSchema = z
      * Leave unset in CI; set in Azure via Key Vault for production.
      */
     ACS_WEBHOOK_SECRET: z.string().min(1).optional(),
+    /**
+     * Expo Push (E6). Leave unset / false in CI — push uses in-memory expo-stub.
+     * Set EXPO_PUSH_ENABLED=true to send via Expo Push API on alert fan-out.
+     * EXPO_ACCESS_TOKEN is optional Bearer auth (recommended in production).
+     */
+    EXPO_PUSH_ENABLED: z
+      .union([z.boolean(), z.enum(["true", "false", "1", "0"])])
+      .optional()
+      .transform((v) => {
+        if (v === undefined) return false;
+        if (typeof v === "boolean") return v;
+        return v === "true" || v === "1";
+      }),
+    EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
   })
   .transform((env) => {
     const from = env.ACS_PHONE_NUMBER ?? env.SMS_FROM;

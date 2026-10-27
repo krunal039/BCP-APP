@@ -51,8 +51,10 @@ Wired by Bicep / Key Vault unless noted.
 | `ACS_PHONE_NUMBER` | Key Vault `acs-phone-number` | only when `wireAcsSecrets=true` |
 | `ACS_WEBHOOK_SECRET` | Key Vault `acs-webhook-secret` | recommended when ACS live |
 | `SMS_FROM` | alias of phone | optional |
+| `EXPO_PUSH_ENABLED` | Container App env (manual) | set `true` for live Expo push; omit → expo-stub |
+| `EXPO_ACCESS_TOKEN` | Key Vault (optional) | Expo access token when push is live |
 
-Until ACS is linked and `wireAcsSecrets=true`, the API uses the **stub DeliveryPort** (same as local/CI) — safe for infra soak without SMS.
+Until ACS is linked and `wireAcsSecrets=true`, the API uses the **stub DeliveryPort** (same as local/CI) — safe for infra soak without SMS. Expo push stays stubbed unless `EXPO_PUSH_ENABLED=true`.
 
 Match local names in `apps/api/.env.example`.
 

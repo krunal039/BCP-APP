@@ -100,7 +100,9 @@ pnpm --filter @bcp/mobile dev
 | Android emulator | `http://10.0.2.2:3001` |
 | Physical device | `http://<your-lan-ip>:3001` (API must listen on `0.0.0.0`) |
 
-Mobile flows: login → compose/submit for approval → approval queue (approve/reject) → urgent bypass (capability + reason) → basic delivery status. Roles are enforced by the API; the UI only hides unavailable actions.
+Mobile flows: login → **notification permission** (registers Expo push token via `POST /me/device-tokens`) → compose/submit for approval → approval queue (approve/reject) → urgent bypass (capability + reason) → basic delivery status. Roles are enforced by the API; the UI only hides unavailable actions.
+
+Push needs a **physical device** (simulators/web skip registration). Link `Member.userId` to the logged-in user so alert fan-out includes the push channel. No App Store / Play submission in MVP — Expo Go or a dev client is enough for pilot.
 
 **Dual-control reminder:** Approver ≠ Sender is rejected with 403 by the API even if the UI is wrong.
 
@@ -199,7 +201,7 @@ State machine: `draft → pending_approval → approved|rejected` (normal) or `d
 
 ## ACS SMS delivery (E5)
 
-Fan-out uses **Azure Communication Services** when configured; otherwise the in-memory **stub** (safe for CI / local without Azure secrets). Push remains an Expo placeholder until E6.
+Fan-out uses **Azure Communication Services** when configured; otherwise the in-memory **stub** (safe for CI / local without Azure secrets).
 
 | Env | Required? | Purpose |
 |---|---|---|
@@ -214,12 +216,28 @@ Fan-out uses **Azure Communication Services** when configured; otherwise the in-
 
 Delivery lifecycle per recipient: `queued → submitted → delivered|failed`. Webhooks match on `providerMessageId` (ACS `messageId`). Unknown IDs are logged and ignored. Alert stays `sending` after ACS submit until DLRs arrive (stub path completes immediately).
 
+Do **not** put ACS secrets in git or CI. Omit ACS_* in GitHub Actions so tests always use the stub.
+
+## Expo push (E6)
+
+Secondary channel on the same approve/bypass fan-out. Device tokens are stored per auth user; snapshot resolves push targets via `Member.userId` → active `DeviceToken`.
+
+| Env | Required? | Purpose |
+|---|---|---|
+| `EXPO_PUSH_ENABLED` | for live push | `true` / `1` to call Expo Push API; omit in CI (uses **expo-stub**) |
+| `EXPO_ACCESS_TOKEN` | recommended in prod | Optional Bearer for Expo Push API (Access tokens on expo.dev) |
+
+| Method | Path | Authz |
+|---|---|---|
+| `POST` / `GET` | `/me/device-tokens` | any authenticated user — upsert / list active tokens |
+| `DELETE` | `/me/device-tokens` | body `{ expoToken }` — soft-deactivate (logout) |
+
+`DeviceNotRegistered` from Expo deactivates the token best-effort. Push failures do not incorrectly force SMS success classification (alert state still driven by SMS path).
+
 ```bash
-pnpm --filter @bcp/api test:unit          # ACS adapter (mocked SDK) + webhook auth/validation
+pnpm --filter @bcp/api test:unit          # ACS + Expo adapters (mocked) + webhook auth/validation
 pnpm --filter @bcp/api test:integration   # dual-control + webhook persistence (needs DB)
 ```
-
-Do **not** put ACS secrets in git or CI. Omit ACS_* in GitHub Actions so tests always use the stub.
 
 ## Docker (API)
 
@@ -253,4 +271,4 @@ GitHub Actions on PRs: install + build + API unit tests + **Bicep compile** (`.g
 
 ## What's next
 
-See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — E6 (Expo push), templates UI polish, store prep, then E9 hardening / pilot checklist.
+See Project docs: `mvp-build-plan.md` / `mvp-backlog.md` — store prep / in-app receive polish, then E9 hardening / pilot checklist.

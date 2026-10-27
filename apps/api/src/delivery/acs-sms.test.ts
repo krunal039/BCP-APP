@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { SnapshotTarget } from "@bcp/shared";
 import { AcsSmsDeliveryAdapter, type SmsClientLike } from "./acs-sms.js";
+import { ExpoPushSender, type ExpoPushClientLike } from "./expo-push.js";
 import { mapAcsDeliveryStatus } from "./webhook-map.js";
 import { resolveAlertStateAfterFanOut } from "../jobs/fan-out.js";
 import { StubDeliveryAdapter } from "./port.js";
@@ -192,6 +193,49 @@ describe("AcsSmsDeliveryAdapter with mocked SmsClient", () => {
     assert.ok(push);
     assert.equal(push!.provider, "expo-stub");
     assert.equal(push!.status, "submitted");
+  });
+
+  it("sends push via injected ExpoPushSender alongside ACS SMS", async () => {
+    const mockSms: SmsClientLike = {
+      async send(request) {
+        return request.to.map((to, i) => ({
+          to,
+          messageId: `acs-${i}`,
+          successful: true,
+          httpStatusCode: 202,
+        }));
+      },
+    };
+    const mockExpo: ExpoPushClientLike = {
+      async send(messages) {
+        return messages.map((_, i) => ({
+          status: "ok" as const,
+          id: `expo-${i}`,
+        }));
+      },
+    };
+
+    const adapter = new AcsSmsDeliveryAdapter({
+      connectionString: "unused",
+      fromPhoneNumber: "+15555550100",
+      smsClient: mockSms,
+      pushSender: new ExpoPushSender({ client: mockExpo }),
+    });
+
+    const result = await adapter.enqueue({
+      alertId: "11111111-1111-1111-1111-111111111111",
+      body: "BCP drill",
+      targets: [
+        smsTarget("+243911000001"),
+        pushTarget("ExponentPushToken[live]"),
+      ],
+    });
+
+    const push = result.results.find((r) => r.channel === "push");
+    assert.ok(push);
+    assert.equal(push!.provider, "expo");
+    assert.equal(push!.status, "submitted");
+    assert.equal(push!.providerMessageId, "expo-0");
   });
 
   it("marks failed when ACS reports unsuccessful", async () => {

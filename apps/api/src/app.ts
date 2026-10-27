@@ -12,6 +12,7 @@ import { membersPlugin } from "./members/plugin.js";
 import { groupsPlugin } from "./groups/plugin.js";
 import { templatesPlugin } from "./templates/plugin.js";
 import { alertsPlugin } from "./alerts/plugin.js";
+import { devicesPlugin } from "./devices/plugin.js";
 import { acsWebhookPlugin } from "./webhooks/acs-plugin.js";
 
 export async function buildApp(env: Env) {
@@ -25,8 +26,10 @@ export async function buildApp(env: Env) {
           "req.headers.x-acs-webhook-secret",
           "req.body.password",
           "req.body.accessToken",
+          "req.body.expoToken",
           "body.password",
           "body.accessToken",
+          "body.expoToken",
         ],
         censor: "[Redacted]",
       },
@@ -49,6 +52,7 @@ export async function buildApp(env: Env) {
   });
   await app.register(sensible);
   await app.register(authPlugin, { env });
+  await app.register(devicesPlugin);
   await app.register(membersPlugin);
   await app.register(groupsPlugin);
   await app.register(templatesPlugin);

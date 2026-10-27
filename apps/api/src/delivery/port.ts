@@ -1,8 +1,10 @@
 import type { DeliveryStatus, SnapshotTarget } from "@bcp/shared";
+import type { PushSender } from "./push-sender.js";
+import { StubPushSender } from "./push-sender.js";
 
 /**
  * Delivery adapter boundary (ACS SMS + Expo push).
- * Stub keeps tests/dev working without Azure credentials.
+ * Stub keeps tests/dev working without Azure / Expo credentials.
  */
 
 export type DeliveryProviderKind = "stub" | "acs";
@@ -15,11 +17,11 @@ export type DeliverySendResult = {
   status: Extract<DeliveryStatus, "queued" | "submitted" | "failed">;
   providerMessageId: string | null;
   errorCode: string | null;
-  provider: "acs" | "stub" | "expo-stub";
+  provider: "acs" | "stub" | "expo" | "expo-stub";
 };
 
 export interface DeliveryPort {
-  /** Which backend will handle SMS fan-out. */
+  /** Which backend will handle SMS fan-out (drives alert terminal vs sending). */
   readonly kind: DeliveryProviderKind;
 
   /**
@@ -79,5 +81,48 @@ export class StubDeliveryAdapter implements DeliveryPort {
 
   clear(): void {
     this.records.length = 0;
+  }
+}
+
+/**
+ * Stub SMS (no ACS) + live/stub Expo push.
+ * Used when Expo push is enabled but ACS is not configured.
+ */
+export class StubSmsExpoDeliveryAdapter implements DeliveryPort {
+  readonly kind = "stub" as const;
+
+  constructor(private readonly pushSender: PushSender = new StubPushSender()) {}
+
+  async enqueue(input: {
+    alertId: string;
+    body: string;
+    targets: SnapshotTarget[];
+  }): Promise<{ recorded: number; results: DeliverySendResult[] }> {
+    const results: DeliverySendResult[] = [];
+    const smsTargets = input.targets.filter((t) => t.channel === "sms");
+    const pushTargets = input.targets.filter((t) => t.channel === "push");
+
+    for (const t of smsTargets) {
+      results.push({
+        channel: "sms",
+        address: t.address,
+        memberId: t.memberId,
+        status: "submitted",
+        providerMessageId: `stub-${input.alertId}`,
+        errorCode: null,
+        provider: "stub",
+      });
+    }
+
+    if (pushTargets.length > 0) {
+      const pushResults = await this.pushSender.send({
+        alertId: input.alertId,
+        body: input.body,
+        targets: pushTargets,
+      });
+      results.push(...pushResults);
+    }
+
+    return { recorded: results.length, results };
   }
 }
